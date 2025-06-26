@@ -1,0 +1,12 @@
+[package]
+name = "alpaca_markets"
+description = "Unofficial Alpaca Markets (https://alpaca.markets) client library"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+categories = ["finance"]
+keywords = ["alpaca", "trading", "stocks", "finance"]
+readme = "README.md"
+repository = "https://github.com/IvanovOleg/alpaca_markets"
+
+[dependencies]
