@@ -1,30 +1,35 @@
-// Alpaca Trading WebSocket Stream Example
+// Trading WebSocket Example
 //
-// This example demonstrates how to connect to Alpaca's trading WebSocket stream
-// to receive real-time updates about orders and account changes.
+// This example demonstrates the convenient .run() method for trading streams which provides:
+// - Automatic reconnection on connection loss
+// - Graceful shutdown handling (Ctrl+C)
+// - Built-in error recovery
+// - Simplified message handling
+//
+// For advanced usage with custom loops, see trading_websocket_advanced.rs
 //
 // To run this example:
 // 1. Set your environment variables (optional):
 //    - APCA_API_KEY_ID=your_api_key
 //    - APCA_API_SECRET_KEY=your_secret_key
-// 2. Run: cargo run --example trading_websocket_demo --features "websocket"
+// 2. Run: cargo run --example trading_websocket --features "websocket,trading"
 
 use alpaca_markets::AlpacaConfig;
 
-#[cfg(feature = "websocket")]
+#[cfg(all(feature = "websocket", feature = "trading"))]
 use alpaca_markets::clients::trading_stream::TradingStreamClient;
 
-#[cfg(feature = "websocket")]
-use alpaca_markets::wss::trading::{AccountUpdate, TradeUpdate, TradingWebSocketMessage};
+#[cfg(all(feature = "websocket", feature = "trading"))]
+use alpaca_markets::wss::{common::RunOptions, trading::TradingWebSocketMessage};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!(
-        "🚀 Alpaca Trading WebSocket Stream Demo
-========================================="
+        "🚀 Alpaca Trading WebSocket Example
+===================================="
     );
 
-    #[cfg(feature = "websocket")]
+    #[cfg(all(feature = "websocket", feature = "trading"))]
     {
         // Create configuration
         let config = match AlpacaConfig::from_env() {
@@ -53,10 +58,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         match client.connect().await {
             Ok(_) => {
-                println!(
-                    "✅ Connected successfully!
-👂 Listening for updates... (Ctrl+C to stop)\n"
-                );
+                println!("✅ Connected successfully!");
+                println!("👂 Listening for trading updates with enhanced API...\n");
+                show_api_features();
             }
             Err(e) => {
                 eprintln!("❌ Connection failed: {}", e);
@@ -66,82 +70,69 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
 
-        // Message counter for demo purposes
-        let mut count = 0;
+        // DEMONSTRATION: Enhanced .run() method with full configuration
+        let options = RunOptions {
+            auto_reconnect: true,
+            max_reconnect_attempts: 3,
+            reconnect_delay_ms: 2000,
+            stop_on_handler_error: false,
+            timeout_secs: 60, // Demo timeout
+            verbose: true,
+        };
 
-        // Listen for messages
-        loop {
-            tokio::select! {
-                // Handle WebSocket messages
-                message_result = client.next_message() => {
-                    match message_result {
-                        Ok(Some(message)) => {
-                            count += 1;
-                            handle_websocket_message(message, count);
-                        }
-                        Ok(None) => {
-                            // No message, continue
-                            continue;
-                        }
-                        Err(e) => {
-                            eprintln!("❌ Message error: {}", e);
-                            break;
-                        }
-                    }
-                }
-
-                // Handle Ctrl+C
-                _ = tokio::signal::ctrl_c() => {
-                    println!("\n👋 Shutting down...");
-                    break;
-                }
-
-                // Add a timeout for demo purposes (remove in real usage)
-                _ = tokio::time::sleep(tokio::time::Duration::from_secs(30)) => {
-                    println!("\n⏰ Demo timeout reached. In real usage, this would run indefinitely.");
-                    break;
-                }
-            }
-        }
-
-        // Clean disconnect
-        if let Err(e) = client.disconnect().await {
-            eprintln!("⚠️  Disconnect error: {}", e);
-        } else {
-            println!("✅ Disconnected cleanly");
-        }
+        // This single call handles everything:
+        client
+            .run_with_options(
+                |message| async move {
+                    handle_trading_message(message);
+                    Ok(())
+                },
+                options,
+            )
+            .await?;
     }
 
     #[cfg(not(all(feature = "websocket", feature = "trading")))]
     {
         println!("❌ This example requires both 'websocket' and 'trading' features.");
         println!(
-            "   Run with: cargo run --example trading_websocket_demo --features \"trading,websocket\""
+            "   Run with: cargo run --example trading_enhanced --features \"websocket,trading\""
         );
     }
 
     Ok(())
 }
 
-#[cfg(feature = "websocket")]
-fn handle_websocket_message(message: TradingWebSocketMessage, count: usize) {
-    println!("📨 Message #{}", count);
-
+#[cfg(all(feature = "websocket", feature = "trading"))]
+fn handle_trading_message(message: TradingWebSocketMessage) {
     match message {
-        TradingWebSocketMessage::TradeUpdate(trade_update) => {
-            print_trade_update(trade_update);
-        }
-        TradingWebSocketMessage::AccountUpdate(account_update) => {
-            print_account_update(account_update);
-        }
+        TradingWebSocketMessage::StreamMessage(stream_msg) => match stream_msg.data {
+            alpaca_markets::wss::trading::StreamData::TradeUpdate(trade_update) => {
+                println!(
+                    "🔄 Trade Update [{}]: Order {} ({}) is now {} - {} shares @ ${}",
+                    trade_update.event,
+                    trade_update.order.id,
+                    trade_update.order.symbol,
+                    trade_update.order.status,
+                    trade_update.order.qty.as_deref().unwrap_or("N/A"),
+                    trade_update.price.as_deref().unwrap_or("market")
+                );
+            }
+            alpaca_markets::wss::trading::StreamData::AccountUpdate(account_update) => {
+                println!(
+                    "💰 Account Update: Buying Power: ${}, Cash: ${}",
+                    account_update.buying_power, account_update.cash
+                );
+            }
+            alpaca_markets::wss::trading::StreamData::Listening(listening) => {
+                println!("� Subscribed to: {:?}", listening.streams);
+            }
+        },
         TradingWebSocketMessage::Connected(connected) => {
-            println!("🔗 Connection: {}", connected.msg);
+            println!("� Connection: {}", connected.msg);
         }
         TradingWebSocketMessage::Authorization(auth) => {
-            println!("🔐 Auth: {} -> {}", auth.action, auth.status);
-        }
-        TradingWebSocketMessage::Listening(listening) => {
-            println!("👂 Subscribed to: {:?}", listening.data.streams);
+            println!("� Auth: {} -> {}", auth.action, auth.status);
         }
         TradingWebSocketMessage::Error(error) => {
             println!("❌ Error [{}]: {}", error.code, error.msg);
@@ -150,66 +141,41 @@ fn handle_websocket_message(message: TradingWebSocketMessage, count: usize) {
             println!("❓ Unknown message: {}", data);
         }
     }
-    println!(); // Add spacing
 }
 
-#[cfg(feature = "websocket")]
-fn print_trade_update(update: TradeUpdate) {
-    let mut output = format!(
-        "📈 TRADE UPDATE
-   └─ Event: {:?}
-   └─ Time: {}
-   └─ Order:
-      ├─ ID: {}
-      ├─ Symbol: {}
-      ├─ Side: {}
-      ├─ Type: {}
-      ├─ Status: {}
-      ├─ Qty: {:?}
-      ├─ Filled: {}",
-        update.event,
-        update.timestamp.format("%H:%M:%S UTC"),
-        update.order.id,
-        update.order.symbol,
-        update.order.side,
-        update.order.order_type,
-        update.order.status,
-        update.order.qty,
-        update.order.filled_qty
-    );
-
-    if let Some(price) = &update.order.limit_price {
-        output.push_str(&format!("\n      ├─ Limit: ${}", price));
-    }
-    if let Some(avg_price) = &update.order.filled_avg_price {
-        output.push_str(&format!("\n      ├─ Avg Fill: ${}", avg_price));
-    }
-
-    output.push_str(&format!(
-        "\n      ├─ TIF: {}
-      └─ Extended Hrs: {}",
-        update.order.time_in_force, update.order.extended_hours
-    ));
-
-    println!("{}", output);
-}
-
-#[cfg(feature = "websocket")]
-fn print_account_update(update: AccountUpdate) {
+fn show_api_features() {
     println!(
-        "💰 ACCOUNT UPDATE
-   └─ Event: {}
-   └─ Time: {}
-   └─ Balances:
-      ├─ Buying Power: ${}
-      ├─ Portfolio Value: ${}
-      ├─ Cash: ${}
-      └─ Withdrawable: ${}",
-        update.event,
-        update.timestamp.format("%H:%M:%S UTC"),
-        update.buying_power,
-        update.total_portfolio_value,
-        update.cash,
-        update.cash_withdrawable
+        "
+🌟 Enhanced WebSocket API Features:
+
+✨ Automatic Reconnection:
+   • Exponential backoff retry strategy
+   • Configurable max attempts and delays
+   • Maintains subscriptions across reconnections
+
+🛡️ Error Handling:
+   • Handler errors can be ignored or stop execution
+   • Connection errors trigger automatic recovery
+   • Verbose logging for debugging
+
+⏰ Flexible Control:
+   • Optional timeouts for demos/testing
+   • Graceful shutdown on Ctrl+C
+   • Channel-based decoupling available
+
+📝 Usage Patterns:
+
+   Simple (most common):
+   client.run(|msg| async {{ handle(msg); Ok(()) }}).await?;
+
+   Configured:
+   client.run_with_options(handler, custom_options).await?;
+
+   Channel-based:
+   client.run_with_channel(sender).await?;
+
+   Manual (power users):
+   while let Ok(Some(msg)) = client.next_message().await {{ }}
+"
     );
 }

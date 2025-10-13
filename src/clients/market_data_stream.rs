@@ -1,8 +1,9 @@
 use crate::config::AlpacaConfig;
 use crate::models::{AlpacaError, AlpacaResult};
-use crate::wss::common::{SerializationFormat, StreamType, WebSocketConnection};
+use crate::wss::common::{RunOptions, SerializationFormat, StreamType, WebSocketConnection};
 use crate::wss::market_data::MarketDataMessage;
 use futures_util::StreamExt;
+use std::time::Duration;
 use tokio_tungstenite::tungstenite::Message;
 
 /// Market data feed types
@@ -217,6 +218,183 @@ impl MarketDataStreamClient {
                 .map_err(|e| AlpacaError::WebSocketError(e.to_string()))?;
         }
         Ok(())
+    }
+
+    /// Run the client with a message handler (convenience method)
+    ///
+    /// This method handles:
+    /// - Automatic reconnection on connection loss
+    /// - Graceful shutdown on Ctrl+C
+    /// - Error recovery and logging
+    /// - Message loop management
+    ///
+    /// # Example
+    /// ```rust
+    /// client.run(|message| async move {
+    ///     match message {
+    ///         MarketDataMessage::Trade(trade) => {
+    ///             println!("Trade: {} @ ${}", trade.symbol, trade.price);
+    ///         }
+    ///         _ => {}
+    ///     }
+    ///     Ok(())
+    /// }).await?;
+    /// ```
+    pub async fn run<F, Fut>(&mut self, handler: F) -> AlpacaResult<()>
+    where
+        F: FnMut(MarketDataMessage) -> Fut,
+        Fut: std::future::Future<Output = AlpacaResult<()>>,
+    {
+        self.run_with_options(handler, RunOptions::default()).await
+    }
+
+    /// Run with configuration options
+    ///
+    /// Provides full control over reconnection behavior, timeouts, and error handling.
+    ///
+    /// # Example
+    /// ```rust
+    /// let options = RunOptions {
+    ///     auto_reconnect: true,
+    ///     max_reconnect_attempts: 10,
+    ///     reconnect_delay_ms: 2000,
+    ///     stop_on_handler_error: true,
+    ///     timeout_secs: 300, // 5 minutes
+    ///     verbose: true,
+    /// };
+    ///
+    /// client.run_with_options(|message| async move {
+    ///     handle_message(message).await
+    /// }, options).await?;
+    /// ```
+    pub async fn run_with_options<F, Fut>(
+        &mut self,
+        mut handler: F,
+        options: RunOptions,
+    ) -> AlpacaResult<()>
+    where
+        F: FnMut(MarketDataMessage) -> Fut,
+        Fut: std::future::Future<Output = AlpacaResult<()>>,
+    {
+        let mut reconnect_attempts = 0;
+        let start_time = std::time::Instant::now();
+
+        if options.verbose {
+            println!(
+                "🚀 Starting market data stream with options: {:#?}",
+                options
+            );
+        }
+
+        loop {
+            tokio::select! {
+                // Handle incoming messages
+                message_result = self.next_message() => {
+                    match message_result {
+                        Ok(Some(messages)) => {
+                            reconnect_attempts = 0; // Reset on successful message
+                            for message in messages {
+                                if let Err(e) = handler(message).await {
+                                    if options.stop_on_handler_error {
+                                        if options.verbose {
+                                            eprintln!("❌ Handler error, stopping: {}", e);
+                                        }
+                                        return Err(e);
+                                    }
+                                    if options.verbose {
+                                        eprintln!("⚠️ Handler error (continuing): {}", e);
+                                    }
+                                }
+                            }
+                        }
+                        Ok(None) => {
+                            // No message, continue
+                            continue;
+                        }
+                        Err(e) => {
+                            if options.auto_reconnect && reconnect_attempts < options.max_reconnect_attempts {
+                                reconnect_attempts += 1;
+                                let delay = options.reconnect_delay_ms * (1_u64 << reconnect_attempts.min(5));
+
+                                if options.verbose {
+                                    eprintln!("🔄 Connection lost, attempting reconnection #{} in {}ms: {}",
+                                             reconnect_attempts, delay, e);
+                                }
+
+                                tokio::time::sleep(Duration::from_millis(delay)).await;
+
+                                if let Err(reconnect_err) = self.connect().await {
+                                    if options.verbose {
+                                        eprintln!("❌ Reconnection failed: {}", reconnect_err);
+                                    }
+                                    continue;
+                                }
+
+                                if options.verbose {
+                                    println!("✅ Reconnected successfully");
+                                }
+                            } else {
+                                if options.verbose {
+                                    eprintln!("❌ Connection error (max retries reached): {}", e);
+                                }
+                                return Err(e);
+                            }
+                        }
+                    }
+                }
+
+                // Handle graceful shutdown
+                _ = tokio::signal::ctrl_c() => {
+                    if options.verbose {
+                        println!("👋 Shutdown signal received, disconnecting...");
+                    }
+                    let _ = self.disconnect().await;
+                    return Ok(());
+                }
+
+                // Optional timeout
+                _ = tokio::time::sleep(Duration::from_secs(options.timeout_secs)), if options.timeout_secs > 0 => {
+                    if options.verbose {
+                        println!("⏰ Timeout reached after {}s", start_time.elapsed().as_secs());
+                    }
+                    let _ = self.disconnect().await;
+                    return Ok(());
+                }
+            }
+        }
+    }
+
+    /// Run with a channel-based approach for decoupled processing
+    ///
+    /// This method sends all messages to the provided channel and handles
+    /// the WebSocket connection management automatically.
+    ///
+    /// # Example
+    /// ```rust
+    /// let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+    ///
+    /// tokio::spawn(async move {
+    ///     client.run_with_channel(tx).await
+    /// });
+    ///
+    /// while let Some(message) = rx.recv().await {
+    ///     handle_message(message).await;
+    /// }
+    /// ```
+    pub async fn run_with_channel(
+        &mut self,
+        sender: tokio::sync::mpsc::UnboundedSender<MarketDataMessage>,
+    ) -> AlpacaResult<()> {
+        self.run(|message| {
+            let sender = sender.clone();
+            async move {
+                if sender.send(message).is_err() {
+                    return Err(AlpacaError::WebSocketError("Channel closed".to_string()));
+                }
+                Ok(())
+            }
+        })
+        .await
     }
 }
 

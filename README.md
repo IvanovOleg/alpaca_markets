@@ -6,7 +6,7 @@ A comprehensive Rust client library for the Alpaca Markets API with **90+ produc
 
 - **Complete Trading API** - 50+ endpoints across 9 domains (orders, positions, portfolio, account, assets, watchlists, options, calendar, crypto)
 - **Comprehensive Market Data API** - 42+ endpoints across 9 asset classes (stocks, options, crypto, forex, fixed income, news, corporate actions, screener, logos)  
-- **WebSocket Streaming** - Real-time data feeds for quotes, trades, and bars
+- **Enhanced WebSocket Streaming** - Real-time feeds with convenient .run() API, automatic reconnection, and robust error recovery
 - **Modular Architecture** - Feature-based compilation and domain-driven submodules
 - **Async/Await** - Full async support using tokio
 - **Type Safety** - Strongly typed responses with comprehensive error handling and serde serialization
@@ -71,6 +71,30 @@ async fn main() -> AlpacaResult<()> {
 }
 ```
 
+### WebSocket Streaming Quick Start
+
+```rust
+use alpaca_markets::{AlpacaConfig, MarketDataStreamClient, Feed, AlpacaResult};
+
+#[tokio::main]
+async fn main() -> AlpacaResult<()> {
+    let config = AlpacaConfig::from_env()?;
+    let mut client = MarketDataStreamClient::new(config, Feed::Iex);
+    
+    // Connect and subscribe
+    client.connect().await?;
+    client.subscribe_quotes(&["AAPL", "MSFT"]).await?;
+    
+    // Simple streaming with enhanced .run() API
+    client.run(|message| async move {
+        println!("Market data: {:?}", message);
+        Ok(())
+    }).await?;
+    
+    Ok(())
+}
+```
+
 ## Examples
 
 ### Trading Examples
@@ -119,22 +143,46 @@ cargo run --example market_clock --features "trading"
 
 ### WebSocket Examples
 
+#### Simple WebSocket API (Recommended)
 ```bash
-# Real-time trading updates
+# Real-time trading updates with convenient .run() method
 cargo run --example trading_websocket --features "websocket"
 
-# Real-time market data streaming
+# Real-time market data streaming with automatic reconnection
 cargo run --example market_data_websocket --features "websocket"
 ```
 
+#### Advanced WebSocket API (Power Users)
 ```bash
-cargo run --example account_configuration
+# Manual control over trading WebSocket lifecycle
+cargo run --example trading_websocket_advanced --features "websocket"
+
+# Custom market data streaming with manual message loops
+cargo run --example market_data_websocket_advanced --features "websocket"
 ```
 
-Run the account activities example:
+### WebSocket API Patterns
 
-```bash
-cargo run --example account_activities
+The library offers two WebSocket usage patterns:
+
+**Simple .run() Method (Most Users):**
+```rust
+// Automatic reconnection, error recovery, graceful shutdown
+client.run(|message| async move {
+    println!("Received: {:?}", message);
+    Ok(())
+}).await?;
+```
+
+**Advanced Manual Control (Power Users):**
+```rust
+// Full control over connection lifecycle
+loop {
+    tokio::select! {
+        msg = client.next_message() => { /* custom handling */ }
+        _ = tokio::signal::ctrl_c() => { break; }
+    }
+}
 ```
 
 These examples demonstrate:
@@ -173,10 +221,12 @@ These examples demonstrate:
 - **Crypto Trading**: Cryptocurrency trading operations
 
 ### WebSocket Streaming ✅
-- **Trading Streams**: Real-time account and trade updates with JSON format
-- **Market Data Streams**: Real-time quotes, trades, and bars with MessagePack format
-- State-based connection management with automatic authentication
-- Object-oriented API design with connection instance methods
+- **Enhanced .run() API**: Convenient method with automatic reconnection, error recovery, and graceful shutdown
+- **Advanced Manual Control**: Full lifecycle management for power users who need custom behavior
+- **Trading Streams**: Real-time trade updates (pending_new, new, fill, canceled, etc.) with proper JSON parsing
+- **Market Data Streams**: Real-time quotes, trades, and bars with MessagePack support and timestamp handling
+- **Robust Error Handling**: Automatic parsing error recovery and connection resilience
+- **Flexible Configuration**: Configurable timeouts, retry strategies, and verbosity levels
 
 ## Project Structure
 
@@ -438,6 +488,63 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 cargo run --example market_data_websocket --features "websocket"
 ```
 
+### Enhanced WebSocket API (NEW!)
+
+The library now provides convenient `.run()` methods that handle all the boilerplate:
+
+```rust
+use alpaca_markets::{AlpacaConfig, MarketDataStreamClient, Feed, RunOptions};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let config = AlpacaConfig::from_env()?;
+    let mut client = MarketDataStreamClient::new(config, Feed::Iex);
+    
+    client.connect().await?;
+    client.subscribe(Some(&["AAPL"]), None, None).await?;
+    
+    // Simple usage - handles everything automatically!
+    client.run(|message| async move {
+        match message {
+            MarketDataMessage::Trade(trade) => {
+                println!("Trade: {} @ ${}", trade.symbol, trade.price);
+            }
+            _ => {}
+        }
+        Ok(())
+    }).await?;
+    
+    Ok(())
+}
+```
+
+**Enhanced features:**
+- ✅ **Automatic reconnection** with exponential backoff
+- ✅ **Graceful shutdown** on Ctrl+C 
+- ✅ **Error recovery** and configurable retry policies
+- ✅ **Zero boilerplate** - just focus on message handling
+- ✅ **Backwards compatible** - existing code still works
+
+**Configuration options:**
+```rust
+let options = RunOptions {
+    auto_reconnect: true,
+    max_reconnect_attempts: 10,
+    reconnect_delay_ms: 2000,
+    timeout_secs: 300,
+    verbose: true,
+    ..Default::default()
+};
+
+client.run_with_options(handler, options).await?;
+```
+
+**Multiple usage patterns:**
+- **Simple**: `client.run(handler).await?` - Most common use case
+- **Configured**: `client.run_with_options(handler, options).await?` - Full control
+- **Channel-based**: `client.run_with_channel(sender).await?` - Decoupled processing
+- **Manual loop**: `client.next_message().await` - Power users (unchanged)
+
 ### WebSocket Features
 
 - **State-based Authentication**: Automatic authentication with connection management
@@ -494,6 +601,21 @@ The free tier includes:
 - Latest quotes and trades
 - Historical data older than 15 minutes
 - Basic API access
+
+## Recent Updates
+
+### WebSocket Enhancements ✨
+- **Enhanced .run() API**: New convenient method with automatic reconnection, graceful shutdown, and error recovery
+- **Fixed Trading Message Parsing**: Resolved MessagePack timestamp deserialization issues that were causing parsing failures
+- **Robust Stream Handling**: Proper support for Alpaca's actual message format with "stream" and "data" fields
+- **Dual API Pattern**: Simple .run() method for most users, advanced manual loops for power users
+- **Comprehensive Error Recovery**: Automatic handling of connection drops and parsing errors with fallback strategies
+
+### Example Reorganization
+- `market_data_websocket.rs` - Simple streaming with .run() method (recommended)
+- `market_data_websocket_advanced.rs` - Manual loop control for advanced users
+- `trading_websocket.rs` - Simple trading updates with .run() method
+- `trading_websocket_advanced.rs` - Advanced trading stream management
 
 ## Contributing
 

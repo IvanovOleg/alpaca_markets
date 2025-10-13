@@ -13,6 +13,36 @@ use tokio_tungstenite::{
     },
 };
 
+/// Configuration options for WebSocket `.run()` methods
+#[derive(Debug, Clone)]
+pub struct RunOptions {
+    /// Whether to automatically reconnect on connection loss
+    pub auto_reconnect: bool,
+    /// Maximum number of reconnection attempts
+    pub max_reconnect_attempts: usize,
+    /// Base delay between reconnection attempts (ms)
+    pub reconnect_delay_ms: u64,
+    /// Whether to stop execution if message handler returns an error
+    pub stop_on_handler_error: bool,
+    /// Optional timeout for the entire run operation (0 = no timeout)
+    pub timeout_secs: u64,
+    /// Whether to print verbose status messages
+    pub verbose: bool,
+}
+
+impl Default for RunOptions {
+    fn default() -> Self {
+        Self {
+            auto_reconnect: true,
+            max_reconnect_attempts: 5,
+            reconnect_delay_ms: 1000,
+            stop_on_handler_error: false,
+            timeout_secs: 0, // No timeout by default
+            verbose: false,
+        }
+    }
+}
+
 /// WebSocket stream type for different endpoints
 #[derive(Debug, Clone, PartialEq)]
 pub enum StreamType {
