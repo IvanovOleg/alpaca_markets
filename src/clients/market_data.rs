@@ -5,6 +5,7 @@ use chrono::{DateTime, Utc};
 use reqwest::Client;
 
 /// High-level client for market data operations
+#[derive(Debug)]
 pub struct MarketDataClient {
     client: Client,
     config: AlpacaConfig,

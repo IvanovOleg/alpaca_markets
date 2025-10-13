@@ -35,6 +35,7 @@ impl Feed {
 }
 
 /// High-level market data stream client (MessagePack only)
+#[derive(Debug)]
 pub struct MarketDataStreamClient {
     config: AlpacaConfig,
     connection: Option<WebSocketConnection>,

@@ -8,6 +8,7 @@ use std::time::Duration;
 use tokio_tungstenite::tungstenite::Message;
 
 /// High-level trading stream client for easy subscription management
+#[derive(Debug)]
 pub struct TradingStreamClient {
     config: AlpacaConfig,
     connection: Option<WebSocketConnection>,

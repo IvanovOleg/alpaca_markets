@@ -10,6 +10,7 @@ use crate::models::{
 use reqwest::Client;
 
 /// High-level client for trading operations
+#[derive(Debug)]
 pub struct TradingClient {
     client: Client,
     config: AlpacaConfig,

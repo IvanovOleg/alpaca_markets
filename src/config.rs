@@ -89,3 +89,17 @@ impl AlpacaConfig {
         headers
     }
 }
+
+impl std::fmt::Debug for AlpacaConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AlpacaConfig")
+            .field("api_key", &"***REDACTED***")
+            .field("secret_key", &"***REDACTED***")
+            .field("is_paper", &self.is_paper)
+            .field("base_url", &self.base_url)
+            .field("data_url", &self.data_url)
+            .field("ws_url", &self.ws_url)
+            .field("default_feed", &self.default_feed)
+            .finish()
+    }
+}

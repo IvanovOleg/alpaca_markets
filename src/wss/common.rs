@@ -396,3 +396,14 @@ impl WebSocketConnection {
         }
     }
 }
+
+impl std::fmt::Debug for WebSocketConnection {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WebSocketConnection")
+            .field("format", &self.format)
+            .field("stream_type", &self.stream_type)
+            .field("state", &self.state)
+            .field("stream", &"<WebSocketStream>")
+            .finish()
+    }
+}
