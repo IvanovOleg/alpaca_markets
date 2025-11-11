@@ -25,7 +25,7 @@ pub struct Order {
     pub order_class: String,
     pub order_type: OrderType,
     pub side: OrderSide,
-    pub time_in_force: TimeInForce,
+    pub time_in_force: OrderTimeInForce,
     pub limit_price: Option<String>,
     pub stop_price: Option<String>,
     pub status: OrderStatus,
@@ -44,7 +44,7 @@ pub struct OrderRequest {
     pub side: OrderSide,
     #[serde(rename = "type")]
     pub order_type: OrderType,
-    pub time_in_force: TimeInForce,
+    pub time_in_force: OrderTimeInForce,
     pub limit_price: Option<String>,
     pub stop_price: Option<String>,
     pub extended_hours: Option<bool>,
@@ -77,7 +77,7 @@ pub enum OrderType {
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
-pub enum TimeInForce {
+pub enum OrderTimeInForce {
     Day,
     Gtc,
     Opg,
@@ -102,8 +102,6 @@ pub enum OrderStatus {
     PendingCancel,
     #[serde(rename = "pending_replace")]
     PendingReplace,
-    #[serde(rename = "pending_review")]
-    PendingReview,
     Accepted,
     #[serde(rename = "pending_new")]
     PendingNew,

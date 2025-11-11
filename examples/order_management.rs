@@ -1,7 +1,7 @@
 use alpaca_markets::{
     AlpacaConfig,
     clients::trading::TradingClient,
-    models::{AlpacaResult, OrderRequest, OrderSide, OrderType, TimeInForce},
+    models::{AlpacaResult, OrderRequest, OrderSide, OrderTimeInForce, OrderType},
 };
 
 #[tokio::main]
@@ -105,7 +105,7 @@ async fn main() -> AlpacaResult<()> {
         notional: None,
         side: OrderSide::Buy,
         order_type: OrderType::Limit,
-        time_in_force: TimeInForce::Day,
+        time_in_force: OrderTimeInForce::Day,
         limit_price: Some("150.00".to_string()),
         stop_price: None,
         extended_hours: Some(false),
