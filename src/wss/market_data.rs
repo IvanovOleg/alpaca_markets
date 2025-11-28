@@ -91,8 +91,11 @@ pub struct BarMessage {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct SubscriptionStatus {
+    #[serde(default)]
     pub trades: Vec<String>,
+    #[serde(default)]
     pub quotes: Vec<String>,
+    #[serde(default)]
     pub bars: Vec<String>,
 }
 
