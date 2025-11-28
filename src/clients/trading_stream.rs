@@ -101,12 +101,32 @@ impl TradingStreamClient {
     ) -> AlpacaResult<Option<TradingWebSocketMessage>> {
         match message {
             Message::Close(_) => Err(AlpacaError::WebSocketError("Connection closed".to_string())),
+            // Handle control frames - these are normal and should be ignored
+            Message::Ping(_) => {
+                println!("🏓 Received Ping (keepalive)");
+                Ok(None)
+            }
+            Message::Pong(_) => {
+                println!("🏓 Received Pong (keepalive)");
+                Ok(None)
+            }
+            Message::Frame(_) => {
+                println!("📦 Received raw Frame (skipping)");
+                Ok(None)
+            }
             _ => {
                 if let Some(ref connection) = self.connection {
                     match connection.deserialize_message(&message) {
                         Ok(parsed_message) => Ok(Some(parsed_message)),
                         Err(e) => {
-                            eprintln!("Failed to parse trading message: {}", e);
+                            // Log the raw message for debugging
+                            if let Message::Text(text) = &message {
+                                eprintln!("Failed to parse trading message: {}", e);
+                                eprintln!("📝 Raw message: {}", text);
+                            } else if let Message::Binary(data) = &message {
+                                eprintln!("Failed to parse trading message: {}", e);
+                                eprintln!("📦 Binary message: {} bytes", data.len());
+                            }
                             Ok(None)
                         }
                     }

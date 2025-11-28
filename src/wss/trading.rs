@@ -72,6 +72,7 @@ pub struct TradeUpdate {
 #[serde(rename_all = "lowercase")]
 pub enum TradeEventType {
     New,
+    Accepted,
     Fill,
     #[serde(rename = "partial_fill")]
     PartialFill,
@@ -100,6 +101,7 @@ impl std::fmt::Display for TradeEventType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let s = match self {
             TradeEventType::New => "new",
+            TradeEventType::Accepted => "accepted",
             TradeEventType::Fill => "fill",
             TradeEventType::PartialFill => "partial_fill",
             TradeEventType::Canceled => "canceled",
