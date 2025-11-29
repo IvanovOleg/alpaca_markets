@@ -1,4 +1,7 @@
-use crate::models::AlpacaResult;
+use crate::models::{
+    AlpacaResult,
+    market_data::bars::{Adjustment, Sort},
+};
 use reqwest::{Client, Response};
 
 impl super::MarketDataApi {
@@ -58,7 +61,8 @@ impl super::MarketDataApi {
         limit: Option<u32>,
         page_token: Option<&str>,
         feed: Option<&str>,
-        sort: Option<&str>,
+        sort: Option<Sort>,
+        adjustment: Option<Adjustment>,
     ) -> AlpacaResult<Response> {
         let mut url = format!("{}/v2/stocks/bars", data_url);
         let mut params = vec![
@@ -81,9 +85,12 @@ impl super::MarketDataApi {
         if let Some(feed) = feed {
             params.push(format!("feed={}", feed));
         }
-        if let Some(sort) = sort {
-            params.push(format!("sort={}", sort));
-        }
+
+        let sort_value = sort.unwrap_or_default();
+        params.push(format!("sort={}", sort_value));
+
+        let adjustment_value = adjustment.unwrap_or_default();
+        params.push(format!("adjustment={}", adjustment_value));
 
         if !params.is_empty() {
             url.push('?');
@@ -377,6 +384,8 @@ impl super::MarketDataApi {
         limit: Option<u32>,
         page_token: Option<&str>,
         feed: Option<&str>,
+        sort: Option<Sort>,
+        adjustment: Option<Adjustment>,
     ) -> AlpacaResult<Response> {
         let mut url = format!("{}/v2/stocks/{}/bars", data_url, symbol);
         let mut params = vec![format!("timeframe={}", timeframe)];
@@ -396,6 +405,12 @@ impl super::MarketDataApi {
         if let Some(feed) = feed {
             params.push(format!("feed={}", feed));
         }
+
+        let sort_value = sort.unwrap_or_default();
+        params.push(format!("sort={}", sort_value));
+
+        let adjustment_value = adjustment.unwrap_or_default();
+        params.push(format!("adjustment={}", adjustment_value));
 
         if !params.is_empty() {
             url.push('?');

@@ -1,4 +1,11 @@
-use alpaca_markets::{AlpacaConfig, clients::market_data::MarketDataClient, models::AlpacaResult};
+use alpaca_markets::{
+    AlpacaConfig,
+    clients::market_data::MarketDataClient,
+    models::{
+        AlpacaResult,
+        market_data::{Adjustment, Sort},
+    },
+};
 use chrono::{Duration, Utc};
 
 #[tokio::main]
@@ -80,6 +87,8 @@ async fn main() -> AlpacaResult<()> {
                 Some(end_time),
                 Some(10),
                 Some("iex"),
+                Some(Sort::Asc),       // or None to use default
+                Some(Adjustment::Raw), // or None to use default
             )
             .await
         {

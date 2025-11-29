@@ -1,6 +1,9 @@
 use crate::api::market_data::MarketDataApi;
 use crate::config::AlpacaConfig;
-use crate::models::{AlpacaError, AlpacaResult, BarsResponse, QuotesResponse, TradesResponse};
+use crate::models::{
+    AlpacaError, AlpacaResult, BarsResponse, QuotesResponse, TradesResponse,
+    market_data::bars::{Adjustment, Sort},
+};
 use chrono::{DateTime, Utc};
 use reqwest::Client;
 
@@ -28,8 +31,10 @@ impl MarketDataClient {
         start: Option<DateTime<Utc>>,
         end: Option<DateTime<Utc>>,
         limit: Option<u32>,
+        sort: Option<Sort>,
+        adjustment: Option<Adjustment>,
     ) -> AlpacaResult<BarsResponse> {
-        self.get_bars_with_feed(symbol, timeframe, start, end, limit, None)
+        self.get_bars_with_feed(symbol, timeframe, start, end, limit, None, sort, adjustment)
             .await
     }
 
@@ -42,6 +47,8 @@ impl MarketDataClient {
         end: Option<DateTime<Utc>>,
         limit: Option<u32>,
         feed: Option<&str>,
+        sort: Option<Sort>,
+        adjustment: Option<Adjustment>,
     ) -> AlpacaResult<BarsResponse> {
         let start_str = start.map(|dt| dt.format("%Y-%m-%dT%H:%M:%SZ").to_string());
         let end_str = end.map(|dt| dt.format("%Y-%m-%dT%H:%M:%SZ").to_string());
@@ -59,6 +66,8 @@ impl MarketDataClient {
             limit,
             None, // page_token
             feed_to_use,
+            sort,
+            adjustment,
         )
         .await?;
 
